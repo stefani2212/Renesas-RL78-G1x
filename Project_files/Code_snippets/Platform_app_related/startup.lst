@@ -1,0 +1,171 @@
+   1                             	/***************************************************************/
+   2                             	/*                                                             */
+   3                             	/*      PROJECT NAME :  IVECO_WL                               */
+   4                             	/*      FILE         :  startup.asm                            */
+   5                             	/*      DESCRIPTION  :  Reset Program                          */
+   6                             	/*      CPU SERIES   :  RL78 - G13                             */
+   7                             	/*      CPU TYPE     :  R5F104B                                */
+   8                             	/*                                                             */
+   9                             	/***************************************************************/                            
+  10                             	
+  11                             	    /*reset_program.asm*/
+  12                             	
+  13                             	    .list
+  14                             	
+  15                             	    .global _PowerON_Reset  /*! global Start routine */
+  16                             	    
+  17                             	#ifdef CPPAPP    
+  18                             	___dso_handle:
+  19                             	    .global ___dso_handle
+  20                             	#endif    
+  21                             	
+  22                             	
+  23                             	    .extern _HardwareSetup /*! external Sub-routine to initialise Hardware*/
+  24                             	    .extern _data
+  25                             	    .extern _mdata
+  26                             	    .extern _ebss
+  27                             	    .extern _bss
+  28                             	    
+  29                             	    .extern _edata
+  30                             	    .extern _main 
+  31                             	    .extern _stack
+  32                             	    .extern _exit
+  33                             	
+  34                             	    /*  ;; HL = start of list
+  35                             	        ;; DE = end of list
+  36                             	        ;; BC = step direction (+2 or -2)
+  37                             	    */
+  38                             	    
+  39                             	    .text
+  40                             	
+  41                             	/* call to _PowerON_Reset */
+  42                             	_PowerON_Reset:
+  43                             	/* initialise user stack pointer */
+  44 0000 CB F8 00 00             	    movw sp,#_stack /* Set stack pointer */
+  45                             	
+  46                             	
+  47                             	/* load data section from ROM to RAM */    
+  48                             	;; block move to initialize .data
+  49                             	
+  50                             	        ;; we're copying from 00:[_romdatastart] to 0F:[_datastart]
+  51                             	        ;; and our data is not in the mirrored area.
+  52 0004 41 00                   	    mov     es, #0
+  53                             	#ifndef __RL78_G10__
+  54 0006 61 CF                   	    sel     rb0         /*  ;;bank 0 */
+  55                             	#endif    
+  56 0008 34 00 00                	    movw    de, #_mdata    /* src ROM address of data section in de */
+  57 000b 36 00 00                	    movw    hl, #_data     /* dest start RAM address of data section in hl */
+  58                             	        
+  59                             	#ifndef __RL78_G10__
+  60 000e 61 DF                   	    sel     rb1              /* bank 1 */
+  61 0010 36 00 00                	    movw    hl, #_data     /* dest start RAM address of data section in hl */
+  62                             	#endif
+  63 0013 30 00 00                	    movw    ax, #_edata   /*    ;; size of romdata section in ax */
+  64 0016 27                      	    subw    ax,hl          /* store data size */
+  65 0017 31 1E                   	    shrw    ax,1
+  66                             	1:
+  67 0019 44 00 00                	    cmpw    ax, #0           /* check if end of data */
+  68 001c DD 10                   	    bz      $1f
+  69 001e B1                      	    decw    ax
+  70                             	#ifdef __RL78_G10__
+  71 001f 12                      	    movw     bc, ax            /* save ax value in bc */
+  72                             	#endif
+  73                             	    
+  74                             	#ifndef __RL78_G10__
+  75 0020 61 CF                   	    sel     rb0             /* bank 0 */
+  76                             	#endif
+  77 0022 11 A9                   	    movw    ax, es:[de]
+  78 0024 BB                      	    movw    [hl], ax
+  79 0025 A5                      	    incw    de
+  80 0026 A5                      	    incw    de
+  81 0027 A7                      	    incw    hl
+  82 0028 A7                      	    incw    hl
+  83                             	#ifndef __RL78_G10__
+  84 0029 61 DF                   	    sel     rb1         /* bank 1  -  compare and decrement*/
+  85                             	#endif
+  86                             	
+  87                             	#ifdef __RL78_G10__
+  88 002b 13                      	    movw     ax, bc            /* restore ax value */
+  89                             	#endif
+  90 002c EF EB                   	    br      $1b
+  91                             	1:
+  92                             	
+  93                             	    
+  94                             	/* bss initialisation : zero out bss */
+  95                             	#ifndef __RL78_G10__
+  96 002e 61 CF                   	    sel     rb0         /* bank 0 */
+  97 0030 36 00 00                	    movw    hl, #_bss      /* store the start address of bss in hl */
+  98 0033 30 00 00                	    movw    ax, #0        /* load AX reg with zero */
+  99 0036 61 DF                   	    sel     rb1         /* bank 1 */
+ 100 0038 30 00 00                	    movw    ax, #_ebss  /* store the end address (size of) bss section in ax */
+ 101 003b 27                      	    subw    ax,hl ;; store data size
+ 102 003c 31 1E                   	    shrw    ax,1
+ 103                             	#endif
+ 104                             	
+ 105                             	#ifdef __RL78_G10__
+ 106 003e 36 00 00                	    movw    hl, #_bss      /* store the start address of bss in hl */
+ 107 0041 30 00 00                	    movw    ax, #_ebss  /* store the end address (size of) bss section in ax */
+ 108 0044 27                      	    subw    ax,hl ;; store data size
+ 109 0045 31 1E                   	    shrw    ax,1
+ 110                             	#endif    
+ 111                             	    
+ 112                             	    
+ 113                             	1:
+ 114 0047 44 00 00                	    cmpw    ax, #0
+ 115 004a DD 0F                   	    bz      $1f
+ 116 004c B1                      	    decw    ax
+ 117                             	#ifdef __RL78_G10__    
+ 118 004d 12                      	    movw     bc, ax        /* save ax value in bc */
+ 119 004e 30 00 00                	    movw    ax, #0
+ 120                             	#endif    
+ 121                             	#ifndef __RL78_G10__        
+ 122 0051 61 CF                   	    sel     rb0         /* bank 0 */
+ 123                             	#endif        
+ 124 0053 BB                      	    movw    [hl], ax
+ 125 0054 A7                      	    incw    hl
+ 126 0055 A7                      	    incw    hl
+ 127                             	#ifdef __RL78_G10__        
+ 128 0056 13                      	    movw    ax, bc        /* restore ax value */
+ 129                             	#endif        
+ 130                             	#ifndef __RL78_G10__        
+ 131 0057 61 DF                   	    sel     rb1
+ 132                             	#endif    
+ 133 0059 EF EC                   	    br      $1b
+ 134                             	1:
+ 135                             	#ifndef __RL78_G10__
+ 136 005b 61 CF                   	    sel     rb0             /* bank 0 */
+ 137                             	#endif
+ 138                             	    
+ 139                             	/* call the hardware initialiser */
+ 140 005d FC 00 00 00             	    call    !!_HardwareSetup
+ 141 0061 00                      	    nop
+ 142                             	
+ 143                             	/* start user program */
+ 144                             	
+ 145 0062 30 00 00                	    movw    ax, #0
+ 146 0065 C1                      	    push    ax      /* envp */
+ 147 0066 C1                      	    push    ax      /* argv */
+ 148 0067 C1                      	    push    ax      /* argc */
+ 149 0068 FC 00 00 00             	    call    !!_main
+ 150                             	
+ 151                             	
+ 152                             	/* call to exit*/
+ 153                             	_exit:
+ 154 006c EF FE                   	     br    $_exit
+ 155                             	
+ 156                             	    .end             
+DEFINED SYMBOLS
+..\Iveco_WL_BSS\SW_Platform\startup.asm:42     .text:00000000 _PowerON_Reset
+..\Iveco_WL_BSS\SW_Platform\startup.asm:18     .text:00000000 ___dso_handle
+..\Iveco_WL_BSS\SW_Platform\startup.asm:153    .text:0000006c _exit
+
+UNDEFINED SYMBOLS
+__rl78_abs__
+_stack
+_mdata
+_data
+_edata
+_bss
+_ebss
+_HardwareSetup
+_main
